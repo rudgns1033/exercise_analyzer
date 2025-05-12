@@ -7,51 +7,53 @@ import 'package:provider/provider.dart';
 import '../models/video_analysis.dart';
 import '../providers/user_provider.dart';
 import '../services/api_service.dart';
+import '../services/video_analysis_service.dart';
 
 class VideoAnalysisScreen extends StatefulWidget {
   const VideoAnalysisScreen({super.key});
-
   @override
   State<VideoAnalysisScreen> createState() => _VideoAnalysisScreenState();
 }
 
 class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
-  XFile? _videoFile;
+  final VideoAnalysisService _service = VideoAnalysisService();
+  bool _loading = false;
   String? _feedback;
-  bool _isProcessing = false;
+
+  @override
+  void dispose() {
+    _service.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickAndAnalyze() async {
     final picker = ImagePicker();
     final file = await picker.pickVideo(source: ImageSource.camera);
     if (file == null) return;
 
-    setState(() {
-      _videoFile = file;
-      _isProcessing = true;
-      _feedback = null;
-    });
+    setState(() { _loading = true; _feedback = null; });
 
-    // Pose Detection
-    final inputImage = InputImage.fromFilePath(file.path);
-    final poses = await GoogleMlKit.vision.poseDetector().processImage(inputImage);
-    final landmarks = poses.first.landmarks;
-    final landmarkMap = poses.first.landmarks;
-    final landmarkList = landmarkMap.values;
-    final jointData = landmarkList.map((l) => {
-      'type': l.type.toString().split('.').last,
-      'x': l.x,
-      'y': l.y,
-    }).toList();
+    try {
+      // 1) 관절 좌표 추출
+      final jointData = await _service.extractJointData(file.path);
 
-    // 서버 전송
-    final userId = context.read<UserProvider>().user?.id ?? 1;
-    final req = VideoAnalysisRequest(userId: userId, jointData: jointData);
-    final result = await ApiService().analyzeVideo(req);
+      // 2) 백엔드로 전송
+      final resp = await _service.sendJointData(
+        userId: 1,
+        backendUrl: 'http://10.0.2.2:8080/analyze',
+        jointData: jointData,
+      );
 
-    setState(() {
-      _isProcessing = false;
-      _feedback = result.feedback;
-    });
+      if (resp.statusCode == 200) {
+        setState(() => _feedback = '서버 응답: ${resp.body}');
+      } else {
+        setState(() => _feedback = '전송 실패: ${resp.statusCode}');
+      }
+    } catch (e) {
+      setState(() => _feedback = '오류 발생: $e');
+    } finally {
+      setState(() { _loading = false; });
+    }
   }
 
   @override
@@ -59,10 +61,13 @@ class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('AI 교정')),
       body: Center(
-        child: _isProcessing
+        child: _loading
             ? const CircularProgressIndicator()
             : _feedback != null
-            ? Text(_feedback!, textAlign: TextAlign.center)
+            ? Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(_feedback!, textAlign: TextAlign.center),
+        )
             : ElevatedButton(
           child: const Text('운동 영상 촬영 및 분석'),
           onPressed: _pickAndAnalyze,

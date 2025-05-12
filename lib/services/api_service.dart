@@ -1,4 +1,3 @@
-// lib/services/api_service.dart
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -9,8 +8,6 @@ import '../models/exercise_record.dart';
 import '../models/plan.dart';
 
 class ApiService {
-  // TODO: 실제 백엔드 주소로 바꿔주세요.
-  // Android 에뮬레이터 로컬호스트: 10.0.2.2
   static const _baseUrl = 'http://10.0.2.2:8080/api';
 
   /// 사용자 등록

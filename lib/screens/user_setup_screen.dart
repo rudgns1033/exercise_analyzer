@@ -60,19 +60,25 @@ class _UserSetupScreenState extends State<UserSetupScreen> {
               const SizedBox(height: 16),
               ElevatedButton(
                 child: const Text('등록'),
-                onPressed: () {
+                onPressed: () async {
                   if (_formKey.currentState!.validate()) {
+                    // 1) 사용자 입력값 모델 생성
                     final user = User(
                       height: int.parse(_heightCtl.text),
                       weight: int.parse(_weightCtl.text),
                       age: int.parse(_ageCtl.text),
                       beginner: _beginner,
                     );
-                    prov.registerUser(user).then((_) {
-                      if (prov.user != null) {
-                        Navigator.pushReplacementNamed(context, '/home');
-                      }
-                    });
+
+                    try {
+                      await prov.registerUser(user);
+
+                      Navigator.of(context).pushReplacementNamed('/home');
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('등록에 실패했습니다: $e')),
+                      );
+                    }
                   }
                 },
               ),

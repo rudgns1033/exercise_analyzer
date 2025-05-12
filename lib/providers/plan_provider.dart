@@ -16,7 +16,7 @@ class PlanProvider extends ChangeNotifier {
     try {
       _plan = await _api.createPlan(p);
     } catch (e) {
-      // TODO: 에러 처리
+      // TODO
     } finally {
       _loading = false;
       notifyListeners();
