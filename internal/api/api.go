@@ -1,6 +1,7 @@
 package api
 
 import (
+	"arnold/internal/core"
 	"arnold/internal/db"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,7 @@ func (s *server) SetHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/users", s.setUser)
 	mux.HandleFunc("GET /api/ws", s.serveWs)
 	mux.HandleFunc("POST /api/plans", s.setPlan)
+	mux.HandleFunc("POST /api/analyze", s.analyze)
 }
 
 func (s *server) getUser(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +69,31 @@ func (s *server) setPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusCreated)
 	w.Write(planJson)
+	return
+}
+
+func (s *server) analyze(w http.ResponseWriter, r *http.Request) {
+	landmarks := core.LandMarks{}
+	json.NewDecoder(r.Body).Decode(&landmarks)
+	defer r.Body.Close()
+
+	log.Debug().Msgf("landmarks: %v", landmarks)
+	w.Header().Set("Content-Type", "application/json")
+
+	feedback := core.Feedback{
+		Correct:        false,
+		FeedBack:       core.PUSHUP_ELBOW,
+		CaloriesBurned: 1,
+	}
+
+	feedbackJson, err := feedback.JSON()
+	if err != nil {
+		w.WriteHeader(http.StatusNonAuthoritativeInfo)
+		w.Write([]byte(`{"message":"json marshal err"}`))
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	w.Write(feedbackJson)
 	return
 }
 
