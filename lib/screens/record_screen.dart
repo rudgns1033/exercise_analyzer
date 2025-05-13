@@ -61,7 +61,7 @@ class _RecordScreenState extends State<RecordScreen> {
                       userId: 1, // TODO: 실제 userId 적용
                       exerciseType: type,
                       reps: _reps,
-                      calories: (_reps * 0.5).toInt(),
+
                     );
                     await recProv.addRecord(rec);
                   }

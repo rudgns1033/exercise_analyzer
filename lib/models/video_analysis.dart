@@ -12,22 +12,22 @@ class VideoAnalysisRequest {
     'joint_data': jointData,
   };
 }
-
+git
 class VideoAnalysisResult {
   final bool correct;
   final String feedback;
-  final int caloriesBurned;
+
 
   VideoAnalysisResult({
     required this.correct,
     required this.feedback,
-    required this.caloriesBurned,
+
   });
 
   factory VideoAnalysisResult.fromJson(Map<String, dynamic> json) =>
       VideoAnalysisResult(
         correct: json['correct'] as bool,
         feedback: json['feedback'] as String,
-        caloriesBurned: json['calories'] as int,
+
       );
 }
