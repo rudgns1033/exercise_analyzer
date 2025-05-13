@@ -8,7 +8,7 @@ import '../models/exercise_record.dart';
 import '../models/plan.dart';
 
 class ApiService {
-  static const _baseUrl = 'http://129.154.48.51:4444/api';
+  static const _baseUrl = 'http://129.154.48.51:9090/api';
 
   /// 사용자 등록
   Future<User> createUser(User user) async {
