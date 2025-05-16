@@ -71,7 +71,8 @@ type FrameData struct {
 	Frame        int       `json:"frame_num"`
 	FrameLength  int       `json:"frame_len"`
 	ExerciseName string    `json:"name"`
-	LandMarks    LandMarks `json:"landmarks"`
+	UserID       int       `json:"user_id"`
+	LandMarks    LandMarks `json:"joint_data"`
 }
 
 func (f *FrameData) Exercise() Exercise {

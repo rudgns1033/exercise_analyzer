@@ -73,11 +73,13 @@ func (s *server) setPlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) analyze(w http.ResponseWriter, r *http.Request) {
-	landmarks := core.LandMarks{}
-	json.NewDecoder(r.Body).Decode(&landmarks)
+	frameData := core.FrameData{}
+	if err := json.NewDecoder(r.Body).Decode(&frameData); err != nil {
+		log.Debug().Msgf("Analyze err: %v", err)
+	}
 	defer r.Body.Close()
 
-	log.Debug().Msgf("landmarks: %v", landmarks)
+	log.Debug().Msgf("frameData: %v", frameData)
 	w.Header().Set("Content-Type", "application/json")
 
 	feedback := core.Feedback{
