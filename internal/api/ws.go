@@ -9,8 +9,9 @@ import (
 )
 
 type WSData struct {
-	Type string          `json:"type"`
-	Data json.RawMessage `json:"data"`
+	ReqID string          `json:"request_id"`
+	Type  string          `json:"type"`
+	Data  json.RawMessage `json:"data"`
 }
 
 var upgrader = websocket.Upgrader{
@@ -72,12 +73,13 @@ func (ws *WSServer) readRoutine() (context.Context, context.CancelFunc) {
 	return ctx, cancel
 }
 
-func (ws *WSServer) write(t string, data interface{}) error {
+func (ws *WSServer) write(reqID string, t string, data interface{}) error {
 	b, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
 	wd := &WSData{}
+	wd.ReqID = reqID
 	wd.Type = t
 	wd.Data = b
 	ws.writeChan <- wd
@@ -106,7 +108,7 @@ func (ws *WSServer) HandleFrame() <-chan struct{} {
 					validate, feedback := exercise.Validate()
 					if validate {
 						t := "feedback"
-						if err := ws.write(t, feedback); err != nil {
+						if err := ws.write(data.ReqID, t, feedback); err != nil {
 							log.Error().Err(err).Str("type", t).Msg("error writing feedback")
 						}
 					}

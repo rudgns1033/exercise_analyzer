@@ -21,8 +21,11 @@ func (p *PushUp) String() string {
 }
 
 func (p *PushUp) Validate() (bool, *Feedback) {
-
-	return true, nil
+	return false, &Feedback{
+		Correct:        false,
+		FeedBack:       p.String(),
+		CaloriesBurned: 1,
+	}
 }
 
 type PullUp struct {
@@ -68,6 +71,7 @@ func (p *PushUp) WristAngle() Angle {
 }
 
 type FrameData struct {
+	ID           string    `json:"id"`
 	Frame        int       `json:"frame_num"`
 	FrameLength  int       `json:"frame_len"`
 	ExerciseName string    `json:"name"`
