@@ -81,8 +81,11 @@ class ApiService {
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(req.toJson()),
     );
-    if (resp.statusCode == 200) {
-      return VideoAnalysisResult.fromJson(jsonDecode(resp.body));
+
+    switch(resp.statusCode){
+      case 200:
+      case 201:
+        return VideoAnalysisResult.fromJson(jsonDecode(resp.body));
     }
     throw Exception('Video analysis failed: ${resp.statusCode} ${resp.body}');
   }
