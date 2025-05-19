@@ -28,6 +28,5 @@ class VideoAnalysisResult {
       VideoAnalysisResult(
         correct: json['correct'] as bool,
         feedback: json['feedback'] as String,
-
       );
 }

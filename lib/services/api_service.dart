@@ -89,4 +89,20 @@ class ApiService {
     }
     throw Exception('Video analysis failed: ${resp.statusCode} ${resp.body}');
   }
+
+  /// 영상 자세 분석 요청
+  Future<VideoAnalysisResult> analyzeVideoWS(VideoAnalysisRequest req) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/analyze'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(req.toJson()),
+    );
+
+    switch(resp.statusCode){
+      case 200:
+      case 201:
+        return VideoAnalysisResult.fromJson(jsonDecode(resp.body));
+    }
+    throw Exception('Video analysis failed: ${resp.statusCode} ${resp.body}');
+  }
 }
