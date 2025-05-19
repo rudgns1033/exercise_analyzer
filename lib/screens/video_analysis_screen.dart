@@ -19,6 +19,7 @@ class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
   final VideoAnalysisService _service = VideoAnalysisService();
   bool _loading = false;
   String? _feedback;
+  bool _file = true;
 
   @override
   void dispose() {
@@ -28,7 +29,12 @@ class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
 
   Future<void> _pickAndAnalyze() async {
     final picker = ImagePicker();
-    final file = await picker.pickVideo(source: ImageSource.camera);
+    XFile? file;
+    if (_file){
+      file = await picker.pickVideo(source: ImageSource.gallery);
+    }else{
+      file = await picker.pickVideo(source: ImageSource.camera);
+    }
     if (file == null) return;
 
     setState(() { _loading = true; _feedback = null; });
@@ -40,15 +46,9 @@ class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
       // 2) 백엔드로 전송
       final resp = await _service.sendJointData(
         userId: 1,
-        backendUrl: 'http://10.0.2.2:8080/analyze',
         jointData: jointData,
       );
-
-      if (resp.statusCode == 200) {
-        setState(() => _feedback = '서버 응답: ${resp.body}');
-      } else {
-        setState(() => _feedback = '전송 실패: ${resp.statusCode}');
-      }
+      _feedback = '서버 응답: ${resp.feedback}';
     } catch (e) {
       setState(() => _feedback = '오류 발생: $e');
     } finally {
