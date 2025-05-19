@@ -1,16 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
-import '../models/video_analysis.dart';
-import '../providers/user_provider.dart';
-import '../services/api_service.dart';
+import 'JointDisplayScreen.dart';
 import '../services/video_analysis_service.dart';
 
 class VideoAnalysisScreen extends StatefulWidget {
-  const VideoAnalysisScreen({super.key});
+  const VideoAnalysisScreen({Key? key}) : super(key: key);
+
   @override
   State<VideoAnalysisScreen> createState() => _VideoAnalysisScreenState();
 }
@@ -18,8 +13,6 @@ class VideoAnalysisScreen extends StatefulWidget {
 class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
   final VideoAnalysisService _service = VideoAnalysisService();
   bool _loading = false;
-  String? _feedback;
-  bool _file = true;
 
   @override
   void dispose() {
@@ -27,32 +20,43 @@ class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
     super.dispose();
   }
 
-  Future<void> _pickAndAnalyze() async {
-    final picker = ImagePicker();
-    XFile? file;
-    if (_file){
-      file = await picker.pickVideo(source: ImageSource.gallery);
-    }else{
-      file = await picker.pickVideo(source: ImageSource.camera);
-    }
-    if (file == null) return;
-
-    setState(() { _loading = true; _feedback = null; });
+  Future<void> _analyzeAndDisplay(ImageSource source) async {
+    setState(() {
+      _loading = true;
+    });
 
     try {
-      // 1) 관절 좌표 추출
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickVideo(source: source);
+      if (file == null) return;
+
       final jointData = await _service.extractJointData(file.path);
 
-      // 2) 백엔드로 전송
-      final resp = await _service.sendJointData(
-        userId: 1,
-        jointData: jointData,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => JointDisplayScreen(
+            videoFilePath: file.path,
+            joints: jointData,
+          ),
+        ),
       );
-      _feedback = '서버 응답: ${resp.feedback}';
+
+      // 서버 전송은 선택적으로 백그라운드에서 처리
+      _service.sendJointData(
+        userId: 1,
+        // backendUrl 파라미터는 현재 로컬 테스트에서 사용하지 않도록 삭제
+        jointData: jointData,
+      ).catchError((e) {
+        debugPrint('서버 전송 에러: \$e');
+      });
     } catch (e) {
-      setState(() => _feedback = '오류 발생: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('오류 발생: $e')),
+      );
     } finally {
-      setState(() { _loading = false; });
+      setState(() {
+        _loading = false;
+      });
     }
   }
 
@@ -63,14 +67,23 @@ class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
       body: Center(
         child: _loading
             ? const CircularProgressIndicator()
-            : _feedback != null
-            ? Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(_feedback!, textAlign: TextAlign.center),
-        )
-            : ElevatedButton(
-          child: const Text('운동 영상 촬영 및 분석'),
-          onPressed: _pickAndAnalyze,
+            : Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ElevatedButton.icon(
+              icon: const Icon(Icons.videocam),
+              label: const Text('영상 촬영 & 분석'),
+              onPressed: () => _analyzeAndDisplay(ImageSource.camera),
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.video_library),
+              label: const Text('저장된 영상 선택 & 분석'),
+              onPressed: () => _analyzeAndDisplay(ImageSource.gallery),
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
+            ),
+          ],
         ),
       ),
     );

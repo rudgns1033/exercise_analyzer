@@ -1,73 +1,55 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:path_provider/path_provider.dart';
 
+/// 동영상 경로에서 첫 프레임을 추출하여 관절 좌표와 함께 보여주는 화면
 class JointDisplayScreen extends StatefulWidget {
-  const JointDisplayScreen({Key? key}) : super(key: key);
+  /// 분석할 비디오 파일 경로
+  final String videoFilePath;
+  /// 추출된 관절 좌표 데이터 리스트
+  final List<Map<String, dynamic>> joints;
+
+  const JointDisplayScreen({
+    Key? key,
+    required this.videoFilePath,
+    required this.joints,
+  }) : super(key: key);
 
   @override
   State<JointDisplayScreen> createState() => _JointDisplayScreenState();
 }
 
 class _JointDisplayScreenState extends State<JointDisplayScreen> {
-  File? _thumbFile;
-  List<Map<String, dynamic>> _joints = [];
-  bool _loading = false;
+  File? _thumbnailFile;
+  bool _loading = true;
 
-  final PoseDetector _poseDetector = PoseDetector(
-    options: PoseDetectorOptions(model: PoseDetectionModel.base),
-  );
+  @override
+  void initState() {
+    super.initState();
+    _generateThumbnail();
+  }
 
-  Future<void> _pickAndExtract() async {
-    final XFile? video = await ImagePicker().pickVideo(source: ImageSource.gallery);
-    if (video == null) return;
-
-    setState(() {
-      _loading = true;
-      _joints = [];
-      _thumbFile = null;
-    });
-
+  /// 첫 프레임 썸네일 생성
+  Future<void> _generateThumbnail() async {
     try {
-      // 1) 프레임 썸네일 생성
       final Uint8List? data = await VideoThumbnail.thumbnailData(
-        video: video.path,
+        video: widget.videoFilePath,
         imageFormat: ImageFormat.JPEG,
         maxWidth: 512,
         timeMs: 0,
       );
-      if (data == null) throw Exception('썸네일 생성 실패');
-
-      // 2) 임시 파일로 저장
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/thumb_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await file.writeAsBytes(data);
-
-      // 3) 관절 좌표 추출
-      final inputImage = InputImage.fromFilePath(file.path);
-      final List<Pose> poses = await _poseDetector.processImage(inputImage);
-      if (poses.isNotEmpty) {
-        final landmarkMap = poses.first.landmarks;
-        _joints = landmarkMap.entries
-            .map((e) => {
-          'type': e.key.toString().split('.').last,
-          'x': e.value.x,
-          'y': e.value.y,
-        })
-            .toList();
+      if (data != null) {
+        final dir = await getTemporaryDirectory();
+        final file = File('${dir.path}/thumb_${DateTime.now().millisecondsSinceEpoch}.jpg');
+        await file.writeAsBytes(data);
+        setState(() {
+          _thumbnailFile = file;
+        });
       }
-
-      setState(() {
-        _thumbFile = file;
-      });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('오류 발생: $e')),
-      );
+      // 썸네일 생성 실패 시 무시
     } finally {
       setState(() {
         _loading = false;
@@ -76,72 +58,44 @@ class _JointDisplayScreenState extends State<JointDisplayScreen> {
   }
 
   @override
-  void dispose() {
-    _poseDetector.close();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('관절 좌표 시각화')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : (_thumbFile == null
-          ? Center(
-        child: ElevatedButton(
-          onPressed: _pickAndExtract,
-          child: const Text('영상 선택 및 좌표 추출'),
-        ),
-      )
-          : LayoutBuilder(
-        builder: (context, constraints) {
-          final screenW = constraints.maxWidth;
-          const thumbWidth = 512.0;
-          final scale = screenW / thumbWidth;
-          return SingleChildScrollView(
-            child: Column(
-              children: [
-                Stack(
-                  children: [
-                    Image.file(_thumbFile!, width: screenW),
-                    ..._joints.map((j) {
-                      final dx = (j['x'] as double) * scale;
-                      final dy = (j['y'] as double) * scale;
-                      return Positioned(
-                        left: dx,
-                        top: dy,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ],
+          : SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_thumbnailFile != null) ...[
+              Center(
+                child: Image.file(
+                  _thumbnailFile!,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  '추출된 관절 좌표',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                ..._joints.map(
-                      (j) => ListTile(
-                    dense: true,
-                    title: Text(j['type'] as String),
-                    subtitle: Text(
-                      "x: \${(j['x'] as double).toStringAsFixed(1)}, y: \${(j['y'] as double).toStringAsFixed(1)}",
-                    ),
-                  ),
-                ),
-              ],
+              ),
+              const SizedBox(height: 16),
+            ],
+            const Text(
+              '추출된 관절 좌표',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-          );
-        },
-      )),
+            const Divider(),
+            ...widget.joints.map((j) {
+              final type = j['type'] as String;
+              final x = (j['x'] as double).toStringAsFixed(1);
+              final y = (j['y'] as double).toStringAsFixed(1);
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(type),
+                subtitle: Text('x: $x, y: $y'),
+              );
+            }),
+          ],
+        ),
+      ),
     );
   }
 }
