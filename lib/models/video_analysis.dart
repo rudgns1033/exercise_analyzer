@@ -12,7 +12,7 @@ class VideoAnalysisRequest {
     'joint_data': jointData,
   };
 }
-git
+
 class VideoAnalysisResult {
   final bool correct;
   final String feedback;

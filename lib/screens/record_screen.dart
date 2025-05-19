@@ -4,7 +4,8 @@ import '../models/exercise_record.dart';
 import '../providers/record_provider.dart';
 
 class RecordScreen extends StatefulWidget {
-  const RecordScreen({super.key});
+  const RecordScreen({Key? key}) : super(key: key);
+
   @override
   State<RecordScreen> createState() => _RecordScreenState();
 }
@@ -58,10 +59,12 @@ class _RecordScreenState extends State<RecordScreen> {
                 try {
                   for (var type in _selected) {
                     final rec = ExerciseRecord(
+                      id: 0, // 서버 생성 ID
                       userId: 1, // TODO: 실제 userId 적용
                       exerciseType: type,
                       reps: _reps,
-
+                      calories: (_reps * 0.5).toInt(),
+                      date: DateTime.now(), // 현재 시각으로 기록
                     );
                     await recProv.addRecord(rec);
                   }

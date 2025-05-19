@@ -18,6 +18,10 @@ class _UserSetupScreenState extends State<UserSetupScreen> {
   final _ageCtl = TextEditingController();
   bool _beginner = true;
 
+  static const int _defaultHeight = 170;
+  static const int _defaultWeight = 60;
+  static const int _defaultAge    = 20;
+
   @override
   Widget build(BuildContext context) {
     final prov = context.watch<UserProvider>();
@@ -58,30 +62,42 @@ class _UserSetupScreenState extends State<UserSetupScreen> {
                 onChanged: (v) => setState(() => _beginner = v),
               ),
               const SizedBox(height: 16),
-              ElevatedButton(
-                child: const Text('등록'),
-                onPressed: () async {
-                  if (_formKey.currentState!.validate()) {
-                    // 1) 사용자 입력값 모델 생성
-                    final user = User(
-                      height: int.parse(_heightCtl.text),
-                      weight: int.parse(_weightCtl.text),
-                      age: int.parse(_ageCtl.text),
-                      beginner: _beginner,
-                    );
 
-                    try {
-                      await prov.registerUser(user);
 
-                      Navigator.of(context).pushReplacementNamed('/home');
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('등록에 실패했습니다: $e')),
-                      );
-                    }
-                  }
-                },
-              ),
+    ElevatedButton(
+    onPressed: () async {
+
+    final height = _heightCtl.text.trim().isNotEmpty
+    ? int.tryParse(_heightCtl.text.trim()) ?? _defaultHeight
+        : _defaultHeight;
+    final weight = _weightCtl.text.trim().isNotEmpty
+    ? int.tryParse(_weightCtl.text.trim()) ?? _defaultWeight
+        : _defaultWeight;
+    final age = _ageCtl.text.trim().isNotEmpty
+    ? int.tryParse(_ageCtl.text.trim()) ?? _defaultAge
+        : _defaultAge;
+
+    // 2. 모델 생성
+    final user = User(
+    height: height,
+    weight: weight,
+    age: age,
+    beginner: _beginner,
+    );
+
+    try {
+    await context.read<UserProvider>().registerUser(user);
+    Navigator.of(context).pushReplacementNamed('/home');
+    } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('등록에 실패했습니다: $e')),
+    );
+    }
+    },
+    child: const Text('등록'),
+    )
+
+
             ],
           ),
         ),
