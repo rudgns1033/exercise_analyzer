@@ -1,146 +1,151 @@
+// lib/services/form_evaluation_service.dart
+
 import 'dart:math';
 
-/// 좌표값 맵 리스트에서 특정 관절 좌표를 Landmark 객체로 변환
-class Landmark {
-  final double x, y;
-  Landmark(this.x, this.y);
-}
-
-Landmark? _getLandmark(List<Map<String, dynamic>> joints, String type) {
-  for (var j in joints) {
-    if (j['type'] == type) {
-      return Landmark(j['x'] as double, j['y'] as double);
-    }
-  }
-  return null;
-}
-
-/// 세 점 A-B-C에서 B를 정점으로 하는 각도(도)를 계산
-double _angle(Landmark a, Landmark b, Landmark c) {
-  final ab = Point(a.x - b.x, a.y - b.y);
-  final cb = Point(c.x - b.x, c.y - b.y);
-  final dot = ab.x * cb.x + ab.y * cb.y;
-  final magAB = sqrt(ab.x * ab.x + ab.y * ab.y);
-  final magCB = sqrt(cb.x * cb.x + cb.y * cb.y);
-  if (magAB == 0 || magCB == 0) return 0.0;
-  var cosA = dot / (magAB * magCB);
-  cosA = cosA.clamp(-1.0, 1.0);
-  return acos(cosA) * 180 / pi;
-}
-
-/// 운동 자세 평가 결과
 class FormFeedback {
   final bool isCorrect;
   final List<String> comments;
+
   FormFeedback({required this.isCorrect, required this.comments});
 }
 
-/// 여러 운동 유형에 대해 자세를 평가
 class FormEvaluationService {
-  /// 팔굽혀펴기 평가
-  FormFeedback evaluatePushUp(List<Map<String, dynamic>> joints) {
-    final List<String> comments = [];
-    final ls = _getLandmark(joints, 'leftShoulder');
-    final le = _getLandmark(joints, 'leftElbow');
-    final lw = _getLandmark(joints, 'leftWrist');
-    if (ls == null || le == null || lw == null) {
-      comments.add('팔 관절을 정확히 인식하지 못했습니다.');
-    } else {
-      final angle = _angle(ls, le, lw);
-      if (angle > 100 || angle < 70) {
-        comments.add('팔꿈치를 약 90도로 굽혀주세요. 현재: ${angle.toStringAsFixed(1)}°');
-      }
+  static FormFeedback evaluate({
+    required String exerciseType,
+    required List<Map<String, dynamic>> joints,
+  }) {
+    switch (exerciseType) {
+      case 'push_up':
+        return _evaluatePushUp(joints);
+      case 'squat':
+        return _evaluateSquat(joints);
+      case 'bench_press':
+        return _evaluateBenchPress(joints);
+      case 'pull_up':
+        return _evaluatePullUp(joints);
+      case 'sit_up':
+        return _evaluateSitUp(joints);
+      default:
+        return FormFeedback(isCorrect: false, comments: ['알 수 없는 운동 유형입니다.']);
     }
-    final ss = _getLandmark(joints, 'leftShoulder');
-    final lh = _getLandmark(joints, 'leftHip');
-    final la = _getLandmark(joints, 'leftAnkle');
-    if (ss == null || lh == null || la == null) {
-      comments.add('몸통 라인을 확인할 수 없습니다.');
-    } else {
-      final torsoAngle = _angle(ss, lh, la);
-      if ((torsoAngle - 180).abs() > 15) {
-        comments.add('몸을 일직선으로 유지하세요. 현재: ${torsoAngle.toStringAsFixed(1)}°');
-      }
-    }
-    return FormFeedback(isCorrect: comments.isEmpty, comments: comments);
   }
 
-  /// 스쿼트 평가
-  FormFeedback evaluateSquat(List<Map<String, dynamic>> joints) {
-    final List<String> comments = [];
-    final lh = _getLandmark(joints, 'leftHip');
-    final lk = _getLandmark(joints, 'leftKnee');
-    final la = _getLandmark(joints, 'leftAnkle');
-    if (lh == null || lk == null || la == null) {
-      comments.add('하체 관절을 정확히 인식하지 못했습니다.');
-    } else {
-      final kneeAngle = _angle(lh, lk, la);
-      if (kneeAngle > 100) {
-        comments.add('엉덩이를 더 낮춰 무릎 각도를 90°로 유지하세요. 현재: ${kneeAngle.toStringAsFixed(1)}°');
-      }
-      if (lk.x > la.x + 0.05) {
-        comments.add('무릎이 발끝을 넘지 않도록 유지하세요.');
+  static FormFeedback _evaluatePushUp(List<Map<String, dynamic>> j) {
+    final notes = <String>[];
+    final elbow = _findLandmark(j, 'leftElbow');
+    final shoulder = _findLandmark(j, 'leftShoulder');
+    final wrist = _findLandmark(j, 'leftWrist');
+    if (elbow == null || shoulder == null || wrist == null) {
+      notes.add('관절을 정확히 인식하지 못했습니다.');
+      return FormFeedback(isCorrect: false, comments: notes);
+    }
+    final angle = _angle(shoulder, elbow, wrist);
+    if (angle < 70) notes.add('팔을 더 굽혀주세요 (현재 ${angle.toStringAsFixed(1)}°)');
+    if (angle > 100) notes.add('팔을 덜 펴도 됩니다 (현재 ${angle.toStringAsFixed(1)}°)');
+    final hip = _findLandmark(j, 'leftHip');
+    final knee = _findLandmark(j, 'leftKnee');
+    if (hip != null && knee != null) {
+      final torsoAngle = _angle(shoulder, hip, knee);
+      if ((torsoAngle - 180).abs() > 10) {
+        notes.add('몸통이 일직선이 아닙니다 (현재 ${torsoAngle.toStringAsFixed(1)}°)');
       }
     }
-    return FormFeedback(isCorrect: comments.isEmpty, comments: comments);
+    return FormFeedback(isCorrect: notes.isEmpty, comments: notes);
   }
 
-  /// 벤치프레스 평가
-  FormFeedback evaluateBenchPress(List<Map<String, dynamic>> joints) {
-    final List<String> comments = [];
-    final ss = _getLandmark(joints, 'leftShoulder');
-    final le = _getLandmark(joints, 'leftElbow');
-    final lw = _getLandmark(joints, 'leftWrist');
-    if (ss == null || le == null || lw == null) {
-      comments.add('벤치프레스 관절을 인식할 수 없습니다.');
-    } else {
-      final elbowAngle = _angle(ss, le, lw);
-      if (elbowAngle < 70 || elbowAngle > 110) {
-        comments.add('팔꿈치를 약 90도로 구부려 바를 가슴까지 내리세요. 현재: ${elbowAngle.toStringAsFixed(1)}°');
-      }
-      if (lw.y > ss.y + 0.1) {
-        comments.add('바를 너무 낮게 내렸습니다. 가슴 상단에 맞춰주세요.');
-      }
+  static FormFeedback _evaluateSquat(List<Map<String, dynamic>> j) {
+    final notes = <String>[];
+    final hip = _findLandmark(j, 'leftHip');
+    final knee = _findLandmark(j, 'leftKnee');
+    final ankle = _findLandmark(j, 'leftAnkle');
+    if (hip == null || knee == null || ankle == null) {
+      notes.add('관절을 정확히 인식하지 못했습니다.');
+      return FormFeedback(isCorrect: false, comments: notes);
     }
-    return FormFeedback(isCorrect: comments.isEmpty, comments: comments);
+    final kneeAngle = _angle(hip, knee, ankle);
+    if (kneeAngle > 100) {
+      notes.add('엉덩이를 더 내려주세요 (현재 ${kneeAngle.toStringAsFixed(1)}°)');
+    }
+    if ((knee['x'] as double) > (ankle['x'] as double) + 20) {
+      notes.add('무릎이 발끝을 넘지 않도록 해주세요');
+    }
+    return FormFeedback(isCorrect: notes.isEmpty, comments: notes);
   }
 
-  /// 턱걸이 평가
-  FormFeedback evaluatePullUp(List<Map<String, dynamic>> joints) {
-    final List<String> comments = [];
-    final ls = _getLandmark(joints, 'leftShoulder');
-    final rs = _getLandmark(joints, 'rightShoulder');
-    final lw = _getLandmark(joints, 'leftWrist');
-    final rw = _getLandmark(joints, 'rightWrist');
-    if (ls == null || rs == null || lw == null || rw == null) {
-      comments.add('턱걸이 관절을 정확히 인식할 수 없습니다.');
-    } else {
-      final avgWristY = (lw.y + rw.y) / 2;
-      final avgShoulderY = (ls.y + rs.y) / 2;
-      if (avgWristY > avgShoulderY - 0.05) {
-        comments.add('턱을 바 위로 충분히 올리세요.');
-      }
-      if ((lw.y - ls.y).abs() < 0.1 && (rw.y - rs.y).abs() < 0.1) {
-        comments.add('팔을 완전히 펴고 시작하세요.');
-      }
+  static FormFeedback _evaluateBenchPress(List<Map<String, dynamic>> j) {
+    final notes = <String>[];
+    final shoulder = _findLandmark(j, 'leftShoulder');
+    final elbow = _findLandmark(j, 'leftElbow');
+    final wrist = _findLandmark(j, 'leftWrist');
+    if (shoulder == null || elbow == null || wrist == null) {
+      notes.add('관절을 정확히 인식하지 못했습니다.');
+      return FormFeedback(isCorrect: false, comments: notes);
     }
-    return FormFeedback(isCorrect: comments.isEmpty, comments: comments);
+    final angle = _angle(shoulder, elbow, wrist);
+    if ((angle - 90).abs() > 15) {
+      notes.add('팔꿈치 각도를 약 90°로 유지해 주세요 (현재 ${angle.toStringAsFixed(1)}°)');
+    }
+    return FormFeedback(isCorrect: notes.isEmpty, comments: notes);
   }
 
-  /// 윗몸일으키기 평가
-  FormFeedback evaluateSitUp(List<Map<String, dynamic>> joints) {
-    final List<String> comments = [];
-    final ls = _getLandmark(joints, 'leftShoulder');
-    final lh = _getLandmark(joints, 'leftHip');
-    final lk = _getLandmark(joints, 'leftKnee');
-    if (ls == null || lh == null || lk == null) {
-      comments.add('윗몸일으키기 관절을 인식할 수 없습니다.');
-    } else {
-      final hipAngle = _angle(ls, lh, lk);
-      if (hipAngle > 100) {
-        comments.add('상체를 더 들어올려 90° 각도를 유지하세요. 현재: ${hipAngle.toStringAsFixed(1)}°');
+  static FormFeedback _evaluatePullUp(List<Map<String, dynamic>> j) {
+    final notes = <String>[];
+    final wrist = _findLandmark(j, 'leftWrist');
+    final shoulder = _findLandmark(j, 'leftShoulder');
+    if (wrist == null || shoulder == null) {
+      notes.add('관절을 정확히 인식하지 못했습니다.');
+      return FormFeedback(isCorrect: false, comments: notes);
+    }
+    if ((wrist['y'] as double) > (shoulder['y'] as double)) {
+      notes.add('턱이 바보다 아래에 있습니다. 턱을 더 올려주세요');
+    }
+    final elbow = _findLandmark(j, 'leftElbow');
+    if (elbow != null) {
+      if ((elbow['y'] as double) < (shoulder['y'] as double) - 20) {
+        notes.add('팔을 더 완전히 펴주세요');
       }
     }
-    return FormFeedback(isCorrect: comments.isEmpty, comments: comments);
+    return FormFeedback(isCorrect: notes.isEmpty, comments: notes);
+  }
+
+  static FormFeedback _evaluateSitUp(List<Map<String, dynamic>> j) {
+    final notes = <String>[];
+    final shoulder = _findLandmark(j, 'leftShoulder');
+    final hip = _findLandmark(j, 'leftHip');
+    final knee = _findLandmark(j, 'leftKnee');
+    if (shoulder == null || hip == null || knee == null) {
+      notes.add('관절을 정확히 인식하지 못했습니다.');
+      return FormFeedback(isCorrect: false, comments: notes);
+    }
+    final angle = _angle(shoulder, hip, knee);
+    if (angle > 100) {
+      notes.add('허리를 더 구부려 상체를 올려주세요 (현재 ${angle.toStringAsFixed(1)}°)');
+    }
+    return FormFeedback(isCorrect: notes.isEmpty, comments: notes);
+  }
+
+  static double _angle(
+      Map<String, dynamic> a,
+      Map<String, dynamic> b,
+      Map<String, dynamic> c,
+      ) {
+    final dx1 = (a['x'] as double) - (b['x'] as double);
+    final dy1 = (a['y'] as double) - (b['y'] as double);
+    final dx2 = (c['x'] as double) - (b['x'] as double);
+    final dy2 = (c['y'] as double) - (b['y'] as double);
+    final dot = dx1 * dx2 + dy1 * dy2;
+    final mag1 = sqrt(dx1 * dx1 + dy1 * dy1);
+    final mag2 = sqrt(dx2 * dx2 + dy2 * dy2);
+    final cosTheta = dot / (mag1 * mag2);
+    return acos(cosTheta) * 180 / pi;
+  }
+
+  static Map<String, dynamic>? _findLandmark(
+      List<Map<String, dynamic>> j, String type) {
+    try {
+      return j.firstWhere((e) => e['type'] == type);
+    } catch (_) {
+      return null;
+    }
   }
 }
