@@ -1,15 +1,17 @@
 // lib/screens/video_analysis_screen.dart
 
-import 'dart:math';                  // ↖ sqrt, acos, pi
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
 import '../services/video_analysis_service.dart';
-import 'JointDisplayScreen.dart';
+import 'jointDisplayScreen.dart';
 
 class VideoAnalysisScreen extends StatefulWidget {
   const VideoAnalysisScreen({Key? key}) : super(key: key);
+
   @override
   State<VideoAnalysisScreen> createState() => _VideoAnalysisScreenState();
 }
@@ -28,26 +30,32 @@ class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
     setState(() => _loading = true);
 
     try {
+      // 1) 비디오 선택 또는 촬영
       final picker = ImagePicker();
       final XFile? file = await picker.pickVideo(source: source);
-      if (file == null) return;
+      if (file == null) {
+        setState(() => _loading = false);
+        return;
+      }
 
+      // 2) 첫 프레임 썸네일 생성
       final String? thumbnailPath = await VideoThumbnail.thumbnailFile(
         video: file.path,
         imageFormat: ImageFormat.JPEG,
         maxWidth: 512,
         timeMs: 0,
       );
-      if (thumbnailPath == null) throw Exception('썸네일 생성 실패');
+      if (thumbnailPath == null) {
+        throw Exception('썸네일 생성에 실패했습니다.');
+      }
 
+      // 3) 관절 좌표 추출
       final joints = await _service.extractJointData(file.path);
 
-      final exerciseType = _classifyExercise(joints);
-
+      // 4) JointDisplayScreen으로 이동 (exerciseType은 그쪽에서 분류)
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => JointDisplayScreen(
-            exerciseType: exerciseType,
             thumbnailPath: thumbnailPath,
             joints: joints,
           ),
@@ -60,44 +68,6 @@ class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
     } finally {
       setState(() => _loading = false);
     }
-  }
-
-  String _classifyExercise(List<Map<String, dynamic>> j) {
-    // 옵셔널 firstWhere
-    Map<String, dynamic>? find(String type) {
-      return j.firstWhere(
-            (e) => e['type'] == type,
-        orElse: () => <String, dynamic>{},
-      ).isEmpty
-          ? null
-          : j.firstWhere((e) => e['type'] == type);
-    }
-
-    // 벡터 각도 계산 헬퍼
-    double angleBetween(String aKey, String bKey, String cKey) {
-      final a = find(aKey), b = find(bKey), c = find(cKey);
-      if (a == null || b == null || c == null) return 0.0;
-      final dx1 = (a['x'] as double) - (b['x'] as double);
-      final dy1 = (a['y'] as double) - (b['y'] as double);
-      final dx2 = (c['x'] as double) - (b['x'] as double);
-      final dy2 = (c['y'] as double) - (b['y'] as double);
-      final dot = dx1 * dx2 + dy1 * dy2;
-      final mag1 = sqrt(dx1 * dx1 + dy1 * dy1);
-      final mag2 = sqrt(dx2 * dx2 + dy2 * dy2);
-      if (mag1 == 0 || mag2 == 0) return 0.0;
-      final cosTheta = (dot / (mag1 * mag2)).clamp(-1.0, 1.0);
-      return acos(cosTheta) * 180 / pi;
-    }
-
-    final pushUpAngle = angleBetween('leftShoulder', 'leftElbow', 'leftWrist');
-    final squatAngle  = angleBetween('leftHip', 'leftKnee', 'leftAnkle');
-
-    // 팔굽혀펴기 (70° ~ 120° 사이면)
-    if (pushUpAngle >= 70 && pushUpAngle <= 120) return 'push_up';
-    // 스쿼트 (100° 이하)
-    if (squatAngle <= 100) return 'squat';
-    // TODO: bench_press, pull_up, sit_up 추가 로직
-    return 'unknown';
   }
 
   @override
@@ -114,14 +84,18 @@ class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
               icon: const Icon(Icons.videocam),
               label: const Text('영상 촬영 & 분석'),
               onPressed: () => _analyzeAndDisplay(ImageSource.camera),
-              style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             ElevatedButton.icon(
               icon: const Icon(Icons.video_library),
               label: const Text('저장된 영상 선택 & 분석'),
               onPressed: () => _analyzeAndDisplay(ImageSource.gallery),
-              style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+              ),
             ),
           ],
         ),
