@@ -1,83 +1,105 @@
+// lib/screens/record_screen.dart
+
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/exercise_record.dart';
-import '../providers/record_provider.dart';
 
 class RecordScreen extends StatefulWidget {
   const RecordScreen({Key? key}) : super(key: key);
-
   @override
   State<RecordScreen> createState() => _RecordScreenState();
 }
 
 class _RecordScreenState extends State<RecordScreen> {
-  final List<String> _categories = ['등', '하체', '어깨', '가슴'];
-  final Set<String> _selected = {};
-  int _reps = 10;
+  final TextEditingController _repsController = TextEditingController();
+  String? _selectedType;
+  bool _saving = false;
+
+  final _exerciseTypes = [
+    'push_up', 'squat', 'bench_press', 'pull_up', 'sit_up'
+  ];
 
   @override
+  void dispose() {
+    _repsController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveRecord() async {
+    if (_selectedType == null || _repsController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('운동 종류와 횟수를 모두 입력하세요')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('exercise_records') ?? <String>[];
+
+    final int reps = int.tryParse(_repsController.text) ?? 0;
+    final int calories = reps * 50;  // 예: 1회당 50kcal 소모
+
+    final rec = ExerciseRecord(
+      id: DateTime.now().millisecondsSinceEpoch,  // 고유 ID
+      userId: 1,                                  // 임시 유저 ID
+      exerciseType: _selectedType!,               // e.g. 'push_up'
+      reps: reps,                                 // 반복 횟수
+      calories: calories,                         // 소모 칼로리
+      date: DateTime.now(),                       // 기록 날짜
+    );
+
+    list.add(jsonEncode(rec.toJson()));
+    await prefs.setStringList('exercise_records', list);
+
+    setState(() {
+      _saving = false;
+      _selectedType = null;
+      _repsController.clear();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('운동 기록이 저장되었습니다!')),
+    );
+  }
+  @override
   Widget build(BuildContext context) {
-    final recProv = context.watch<RecordProvider>();
     return Scaffold(
       appBar: AppBar(title: const Text('운동 기록')),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: recProv.isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('운동 종류', style: TextStyle(fontWeight: FontWeight.bold)),
-            ..._categories.map((cat) => CheckboxListTile(
-              title: Text(cat),
-              value: _selected.contains(cat),
-              onChanged: (v) {
-                setState(() {
-                  if (v == true) _selected.add(cat);
-                  else _selected.remove(cat);
-                });
-              },
-            )),
+            const Text('운동 종류'),
+            DropdownButton<String>(
+              isExpanded: true,
+              value: _selectedType,
+              hint: const Text('선택하세요'),
+              items: _exerciseTypes.map((t) {
+                return DropdownMenuItem(
+                  value: t,
+                  child: Text(t.replaceAll('_', ' ')),
+                );
+              }).toList(),
+              onChanged: (v) => setState(() => _selectedType = v),
+            ),
             const SizedBox(height: 16),
-            Text('반복 횟수: $_reps 회'),
-            Slider(
-              min: 1,
-              max: 200,
-              divisions: 199,
-              value: _reps.toDouble(),
-              onChanged: (v) => setState(() => _reps = v.toInt()),
+            TextField(
+              controller: _repsController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: '횟수'),
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
-              child: const Text('저장'),
-              onPressed: () async {
-                if (_selected.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('운동 종류를 최소 하나 선택하세요')),
-                  );
-                  return;
-                }
-                try {
-                  for (var type in _selected) {
-                    final rec = ExerciseRecord(
-                      id: 0, // 서버 생성 ID
-                      userId: 1, // TODO: 실제 userId 적용
-                      exerciseType: type,
-                      reps: _reps,
-                      calories: (_reps * 0.5).toInt(),
-                      date: DateTime.now(), // 현재 시각으로 기록
-                    );
-                    await recProv.addRecord(rec);
-                  }
-                  setState(() => _selected.clear());
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('저장되었습니다')),
-                  );
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('저장에 실패했습니다: $e')),
-                  );
-                }
-              },
+            Center(
+              child: _saving
+                  ? const CircularProgressIndicator()
+                  : ElevatedButton(
+                onPressed: _saveRecord,
+                child: const Text('저장'),
+              ),
             ),
           ],
         ),
