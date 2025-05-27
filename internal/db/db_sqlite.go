@@ -2,8 +2,8 @@ package db
 
 import (
 	_ "github.com/glebarez/go-sqlite"
+	"github.com/glebarez/sqlite"
 	"github.com/rs/zerolog/log"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"os"
 )
