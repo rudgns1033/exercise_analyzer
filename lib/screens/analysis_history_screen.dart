@@ -1,5 +1,8 @@
+// lib/screens/analysis_history_screen.dart
+
 import 'dart:io';
 import 'package:flutter/material.dart';
+
 import '../models/analysis_session.dart';
 import '../services/analysis_history_service.dart';
 import 'jointDisplayScreen.dart';
@@ -32,7 +35,7 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
               await AnalysisHistoryService.clear();
               setState(() => _future = AnalysisHistoryService.load());
             },
-          )
+          ),
         ],
       ),
       body: FutureBuilder<List<AnalysisSession>>(
@@ -48,12 +51,10 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
           return ListView.builder(
             itemCount: sessions.length,
             itemBuilder: (ctx, i) {
-              final s = sessions[sessions.length - 1 - i]; // 최신이 위
+              final s = sessions[sessions.length - 1 - i];
               return ListTile(
                 leading: Image.file(File(s.thumbnailPath), width: 56, fit: BoxFit.cover),
-                title: Text(
-                  s.exerciseType.replaceAll('_', ' ').toUpperCase(),
-                ),
+                title: Text(s.exerciseType.replaceAll('_', ' ').toUpperCase()),
                 subtitle: Text(
                   '${s.timestamp.year}/${s.timestamp.month.toString().padLeft(2,'0')}/'
                       '${s.timestamp.day.toString().padLeft(2,'0')} '
@@ -61,12 +62,14 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
                       '${s.timestamp.minute.toString().padLeft(2,'0')}',
                 ),
                 onTap: () {
-                  Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => JointDisplayScreen(
-                      thumbnailPath: s.thumbnailPath,
-                      joints: s.joints,
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => JointDisplayScreen(
+                        thumbnailPath: s.thumbnailPath,
+                        joints: s.joints,
+                      ),
                     ),
-                  ));
+                  );
                 },
               );
             },

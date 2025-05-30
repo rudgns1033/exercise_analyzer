@@ -15,14 +15,12 @@ class FeedbackScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final feedback = FormEvaluationService.evaluate(
-      exerciseType: exerciseType,
-      joints: joints,
-    );
+    final result = FormEvaluationService().evaluate(exerciseType, joints);
+    final comments = (result['comments'] as List).cast<String>();
 
     return Scaffold(
       appBar: AppBar(title: const Text('자세 피드백')),
-      body: feedback.comments.isEmpty
+      body: comments.isEmpty
           ? const Center(
         child: Text(
           '정상적인 자세입니다!',
@@ -31,10 +29,10 @@ class FeedbackScreen extends StatelessWidget {
       )
           : ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: feedback.comments.length,
+        itemCount: comments.length,
         itemBuilder: (_, i) => ListTile(
           leading: const Icon(Icons.error, color: Colors.red),
-          title: Text(feedback.comments[i]),
+          title: Text(comments[i]),
         ),
       ),
     );

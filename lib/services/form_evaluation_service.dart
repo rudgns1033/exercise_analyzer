@@ -2,150 +2,72 @@
 
 import 'dart:math';
 
-class FormFeedback {
-  final bool isCorrect;
-  final List<String> comments;
-
-  FormFeedback({required this.isCorrect, required this.comments});
+/// 세 점 사이의 각도를 degree 로 계산
+double _calculateAngle(
+    Map<String, double> a,
+    Map<String, double> b,
+    Map<String, double> c,
+    ) {
+  final dx1 = a['x']! - b['x']!;
+  final dy1 = a['y']! - b['y']!;
+  final dx2 = c['x']! - b['x']!;
+  final dy2 = c['y']! - b['y']!;
+  final dot = dx1 * dx2 + dy1 * dy2;
+  final mag1 = sqrt(dx1 * dx1 + dy1 * dy1);
+  final mag2 = sqrt(dx2 * dx2 + dy2 * dy2);
+  if (mag1 == 0 || mag2 == 0) return 0.0;
+  final cosT = (dot / (mag1 * mag2)).clamp(-1.0, 1.0);
+  return acos(cosT) * 180 / pi;
 }
 
+/// 운동별 피드백 설정
+class ExerciseConfig {
+  final String p1, p2, p3;
+  final double idealAngle;
+  final String jointName;
+  const ExerciseConfig(this.p1, this.p2, this.p3, this.idealAngle, this.jointName);
+}
+
+const Map<String, ExerciseConfig> _configs = {
+  'push_up':    ExerciseConfig('leftShoulder', 'leftElbow', 'leftWrist',  45.0,  '팔꿈치'),
+  'bench_press':ExerciseConfig('leftShoulder', 'leftElbow', 'leftWrist',  90.0,  '팔꿈치'),
+  'squat':      ExerciseConfig('leftHip',      'leftKnee',  'leftAnkle', 90.0,  '무릎'),
+  'pull_up':    ExerciseConfig('leftShoulder', 'leftElbow', 'leftWrist', 160.0, '팔꿈치'),
+  'sit_up':     ExerciseConfig('leftHip',      'leftKnee',  'leftShoulder', 30.0,'허리'),
+};
+
+/// joints(list of {type, x, y}) 만으로 피드백 comments 리턴
 class FormEvaluationService {
-  static FormFeedback evaluate({
-    required String exerciseType,
-    required List<Map<String, dynamic>> joints,
-  }) {
-    switch (exerciseType) {
-      case 'push_up':
-        return _evaluatePushUp(joints);
-      case 'squat':
-        return _evaluateSquat(joints);
-      case 'bench_press':
-        return _evaluateBenchPress(joints);
-      case 'pull_up':
-        return _evaluatePullUp(joints);
-      case 'sit_up':
-        return _evaluateSitUp(joints);
-      default:
-        return FormFeedback(isCorrect: false, comments: ['알 수 없는 운동 유형입니다.']);
+  /// { 'comments': List<String> }
+  Map<String, dynamic> evaluate(String exerciseType, List<Map<String, dynamic>> joints) {
+    final cfg = _configs[exerciseType];
+    if (cfg == null) {
+      return {'comments': ['지원하지 않는 운동입니다.']};
     }
-  }
 
-  static FormFeedback _evaluatePushUp(List<Map<String, dynamic>> j) {
-    final notes = <String>[];
-    final elbow = _findLandmark(j, 'leftElbow');
-    final shoulder = _findLandmark(j, 'leftShoulder');
-    final wrist = _findLandmark(j, 'leftWrist');
-    if (elbow == null || shoulder == null || wrist == null) {
-      notes.add('관절을 정확히 인식하지 못했습니다.');
-      return FormFeedback(isCorrect: false, comments: notes);
-    }
-    final angle = _angle(shoulder, elbow, wrist);
-    if (angle < 70) notes.add('팔을 더 굽혀주세요 (현재 ${angle.toStringAsFixed(1)}°)');
-    if (angle > 100) notes.add('팔을 덜 펴도 됩니다 (현재 ${angle.toStringAsFixed(1)}°)');
-    final hip = _findLandmark(j, 'leftHip');
-    final knee = _findLandmark(j, 'leftKnee');
-    if (hip != null && knee != null) {
-      final torsoAngle = _angle(shoulder, hip, knee);
-      if ((torsoAngle - 180).abs() > 10) {
-        notes.add('몸통이 일직선이 아닙니다 (현재 ${torsoAngle.toStringAsFixed(1)}°)');
-      }
-    }
-    return FormFeedback(isCorrect: notes.isEmpty, comments: notes);
-  }
+    // 빠른 조회를 위한 map 생성
+    final lookup = <String, Map<String, double>>{
+      for (var j in joints)
+        (j['type'] as String): {'x': j['x'] as double, 'y': j['y'] as double}
+    };
 
-  static FormFeedback _evaluateSquat(List<Map<String, dynamic>> j) {
-    final notes = <String>[];
-    final hip = _findLandmark(j, 'leftHip');
-    final knee = _findLandmark(j, 'leftKnee');
-    final ankle = _findLandmark(j, 'leftAnkle');
-    if (hip == null || knee == null || ankle == null) {
-      notes.add('관절을 정확히 인식하지 못했습니다.');
-      return FormFeedback(isCorrect: false, comments: notes);
+    final a = lookup[cfg.p1];
+    final b = lookup[cfg.p2];
+    final c = lookup[cfg.p3];
+    if (a == null || b == null || c == null) {
+      return {'comments': ['관절을 인식할 수 없습니다.']};
     }
-    final kneeAngle = _angle(hip, knee, ankle);
-    if (kneeAngle > 100) {
-      notes.add('엉덩이를 더 내려주세요 (현재 ${kneeAngle.toStringAsFixed(1)}°)');
-    }
-    if ((knee['x'] as double) > (ankle['x'] as double) + 20) {
-      notes.add('무릎이 발끝을 넘지 않도록 해주세요');
-    }
-    return FormFeedback(isCorrect: notes.isEmpty, comments: notes);
-  }
 
-  static FormFeedback _evaluateBenchPress(List<Map<String, dynamic>> j) {
-    final notes = <String>[];
-    final shoulder = _findLandmark(j, 'leftShoulder');
-    final elbow = _findLandmark(j, 'leftElbow');
-    final wrist = _findLandmark(j, 'leftWrist');
-    if (shoulder == null || elbow == null || wrist == null) {
-      notes.add('관절을 정확히 인식하지 못했습니다.');
-      return FormFeedback(isCorrect: false, comments: notes);
+    final angle = _calculateAngle(a, b, c);
+    final delta = cfg.idealAngle - angle;
+    const tol = 5.0;
+    if (delta.abs() <= tol) {
+      // 오차 범위 내 → 정상
+      return {'comments': []};
     }
-    final angle = _angle(shoulder, elbow, wrist);
-    if ((angle - 90).abs() > 15) {
-      notes.add('팔꿈치 각도를 약 90°로 유지해 주세요 (현재 ${angle.toStringAsFixed(1)}°)');
-    }
-    return FormFeedback(isCorrect: notes.isEmpty, comments: notes);
-  }
 
-  static FormFeedback _evaluatePullUp(List<Map<String, dynamic>> j) {
-    final notes = <String>[];
-    final wrist = _findLandmark(j, 'leftWrist');
-    final shoulder = _findLandmark(j, 'leftShoulder');
-    if (wrist == null || shoulder == null) {
-      notes.add('관절을 정확히 인식하지 못했습니다.');
-      return FormFeedback(isCorrect: false, comments: notes);
-    }
-    if ((wrist['y'] as double) > (shoulder['y'] as double)) {
-      notes.add('턱이 바보다 아래에 있습니다. 턱을 더 올려주세요');
-    }
-    final elbow = _findLandmark(j, 'leftElbow');
-    if (elbow != null) {
-      if ((elbow['y'] as double) < (shoulder['y'] as double) - 20) {
-        notes.add('팔을 더 완전히 펴주세요');
-      }
-    }
-    return FormFeedback(isCorrect: notes.isEmpty, comments: notes);
-  }
-
-  static FormFeedback _evaluateSitUp(List<Map<String, dynamic>> j) {
-    final notes = <String>[];
-    final shoulder = _findLandmark(j, 'leftShoulder');
-    final hip = _findLandmark(j, 'leftHip');
-    final knee = _findLandmark(j, 'leftKnee');
-    if (shoulder == null || hip == null || knee == null) {
-      notes.add('관절을 정확히 인식하지 못했습니다.');
-      return FormFeedback(isCorrect: false, comments: notes);
-    }
-    final angle = _angle(shoulder, hip, knee);
-    if (angle > 100) {
-      notes.add('허리를 더 구부려 상체를 올려주세요 (현재 ${angle.toStringAsFixed(1)}°)');
-    }
-    return FormFeedback(isCorrect: notes.isEmpty, comments: notes);
-  }
-
-  static double _angle(
-      Map<String, dynamic> a,
-      Map<String, dynamic> b,
-      Map<String, dynamic> c,
-      ) {
-    final dx1 = (a['x'] as double) - (b['x'] as double);
-    final dy1 = (a['y'] as double) - (b['y'] as double);
-    final dx2 = (c['x'] as double) - (b['x'] as double);
-    final dy2 = (c['y'] as double) - (b['y'] as double);
-    final dot = dx1 * dx2 + dy1 * dy2;
-    final mag1 = sqrt(dx1 * dx1 + dy1 * dy1);
-    final mag2 = sqrt(dx2 * dx2 + dy2 * dy2);
-    final cosTheta = dot / (mag1 * mag2);
-    return acos(cosTheta) * 180 / pi;
-  }
-
-  static Map<String, dynamic>? _findLandmark(
-      List<Map<String, dynamic>> j, String type) {
-    try {
-      return j.firstWhere((e) => e['type'] == type);
-    } catch (_) {
-      return null;
-    }
+    final dir = delta > 0 ? '굽혀야' : '펴야';
+    final text = '${cfg.jointName}를 ${delta.abs().toStringAsFixed(1)}° 더 $dir 합니다';
+    return {'comments': [text]};
   }
 }
