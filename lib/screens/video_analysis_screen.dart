@@ -1,11 +1,11 @@
 // lib/screens/video_analysis_screen.dart
 
-import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
 
+import '../models/joints.dart';
 import '../services/video_analysis_service.dart';
 import '../models/analysis_session.dart';
 import '../services/analysis_history_service.dart';
@@ -27,47 +27,6 @@ class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
     super.dispose();
   }
 
-  Future<void> _analyzeAndDisplay(ImageSource source) async {
-    setState(() => _loading = true);
-    try {
-      final picker = ImagePicker();
-      final XFile? file = await picker.pickVideo(source: source);
-      if (file == null) return;
-
-      final thumb = await VideoThumbnail.thumbnailFile(
-        video: file.path,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 512,
-        timeMs: 0,
-      );
-      if (thumb == null) throw Exception('썸네일 생성 실패');
-
-      final joints = await _service.extractJointData(file.path, 0);
-
-      // 세션 저장
-      final session = AnalysisSession(
-        timestamp: DateTime.now(),
-        exerciseType: '',
-        thumbnailPath: thumb,
-        joints: joints,
-      );
-      await AnalysisHistoryService.saveSession(session);
-
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => JointDisplayScreen(
-            thumbnailPath: thumb,
-            joints: joints,
-          ),
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류 발생: $e')));
-    } finally {
-      setState(() => _loading = false);
-    }
-  }
-
   Future<void> _pickAndAnalyzeStream(ImageSource source) async {
     final picker = ImagePicker();
     XFile? file;
@@ -78,19 +37,32 @@ class _VideoAnalysisScreenState extends State<VideoAnalysisScreen> {
     try {
       // 1) 관절 좌표 추출
       final dir = await getApplicationDocumentsDirectory();
-      final jointStream = _service.getDetectStream(file?.path, dir.path);
+      final jointStream = _service.getDetectStreamThumb(file?.path, dir.path);
+      final completer = Completer<List<Joints>>();
+
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => JointStreamDisplayScreen(
-            thumbnailPath: "${dir.path}/th_0.jpg",
             jointStream: jointStream,
+            jointCompleter: completer,
           ),
         ),
       );
 
+      final joints = await completer.future;
 
-      // _feedback = '서버 응답: ${resp.feedback}';
+      print("await fin save session");
+
+      // 세션 저장
+      final session = AnalysisSession(
+        timestamp: DateTime.now(),
+        exerciseType: '',
+        jointsArr: joints,
+      );
+      await AnalysisHistoryService.saveSession(session);
+
     } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류 발생: $e')));
 
     } finally {
       setState(() { _loading = false; });
