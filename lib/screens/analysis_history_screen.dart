@@ -1,6 +1,6 @@
 // lib/screens/analysis_history_screen.dart
 
-import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/analysis_session.dart';
@@ -44,8 +44,8 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
           if (snap.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
           }
-          final sessions = snap.data!;
-          if (sessions.isEmpty) {
+          final sessions = snap.data;
+          if (sessions == null || sessions.isEmpty) {
             return const Center(child: Text('저장된 기록이 없습니다'));
           }
           return ListView.builder(
@@ -53,7 +53,7 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
             itemBuilder: (ctx, i) {
               final s = sessions[sessions.length - 1 - i];
               return ListTile(
-                leading: Image.file(File(s.thumbnailPath), width: 56, fit: BoxFit.cover),
+                leading: Image.memory(s.jointsArr[0].frameBytes!, width: 56, fit: BoxFit.cover),
                 title: Text(s.exerciseType.replaceAll('_', ' ').toUpperCase()),
                 subtitle: Text(
                   '${s.timestamp.year}/${s.timestamp.month.toString().padLeft(2,'0')}/'
@@ -64,9 +64,9 @@ class _AnalysisHistoryScreenState extends State<AnalysisHistoryScreen> {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => JointDisplayScreen(
-                        thumbnailPath: s.thumbnailPath,
-                        joints: s.joints,
+                      builder: (_) => JointStreamDisplayScreen(
+                        jointStream: Stream.fromIterable(s.jointsArr),
+                        jointCompleter: null,
                       ),
                     ),
                   );

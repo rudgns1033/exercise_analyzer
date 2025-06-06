@@ -1,26 +1,87 @@
+import 'dart:async';
 // lib/screens/joint_display_screen.dart
 
-import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../models/joints.dart';
 import 'feedback_screen.dart';
 
-class JointDisplayScreen extends StatelessWidget {
-  final String thumbnailPath;
-  final List<Map<String, dynamic>> joints;
+class JointStreamDisplayScreen extends StatelessWidget {
+  /// 썸네일 이미지 파일 경로
+  /// 추출된 관절 좌표 리스트
+  final Stream<Joints> jointStream;
+  final Completer<List<Joints>>? jointCompleter;
 
-  const JointDisplayScreen({
+  bool isFirst = true;
+  List<Map<String, dynamic>>? firstJoint;
+  int count = 0;
+
+  JointStreamDisplayScreen({
     Key? key,
-    required this.thumbnailPath,
-    required this.joints,
+    required this.jointStream,
+    required this.jointCompleter,
   }) : super(key: key);
 
-  /// 관절 좌표만으로 운동 유형 판별
-  String get exerciseType => _classifyExercise(joints);
+  List<Map<String, dynamic>>? get joints  {
+    if (firstJoint != null){
+      return firstJoint;
+    }
+    Timer.periodic(Duration(seconds: 1), (timer) {
+      if (firstJoint != null){
+        timer.cancel(); // 루프 종료
+        return;
+      }
+      print('loop $count\n');
+      count++;
+      if (count >= 10) {
+        timer.cancel(); // 루프 종료
+      }
+    });
+    return firstJoint;
+  }
 
-  String _classifyExercise(List<Map<String, dynamic>> joints) {
+  /// 관절 좌표만으로 운동 유형 판별
+  // Future<String> get exerciseType async => await _classifyExercise(jointCompleter.future);
+
+  Future<List<Joints>> waitForStreamArr() {
+    final List<Joints>allJoints = [];
+    Completer<List<Joints>>? completer;
+
+    if (jointCompleter != null){
+      completer = jointCompleter;
+    }else{
+      completer = Completer<List<Joints>>();
+    }
+
+    jointStream.listen(
+          (onData) {
+        allJoints.add(Joints(frameBytes: onData.frameBytes, joints: onData.joints)); // 스트림이 전달하는 리스트를 병합
+        if (isFirst) {
+          firstJoint = onData.joints;
+          isFirst = false;
+        }
+        print(onData);
+      },
+      onDone: () {
+        if (!completer!.isCompleted) {
+          completer.complete(allJoints); // 모든 데이터 반환
+        }
+      },
+      onError: (error) {
+        print('waitForStream error: $error');
+        if (!completer!.isCompleted) {
+          // completer.completeError(error);
+          completer.complete(allJoints); // 모든 데이터 반환
+        }
+      },
+    );
+
+    return completer!.future;
+  }
+
+  String _classifyExercise(List<Map<String, dynamic>>? joints) {
     final lookup = <String, Map<String, double>>{
-      for (var j in joints)
+      for (var j in joints!)
         (j['type'] as String): {'x': j['x'] as double, 'y': j['y'] as double}
     };
 
@@ -48,6 +109,9 @@ class JointDisplayScreen extends StatelessWidget {
     final shoulderY  = yOf('leftShoulder');
     final sitAngle   = angle('leftShoulder','leftHip','leftKnee');
 
+    if (wristY!=null && shoulderY!=null && wristY<shoulderY-20) {
+      return 'pull_up';
+    }
     if (pushElbow>=70 && pushElbow<=120 && torsoAngle>=160 && torsoAngle<=200) {
       return 'push_up';
     }
@@ -57,9 +121,6 @@ class JointDisplayScreen extends StatelessWidget {
     if (squatKnee>0) {
       return 'squat';
     }
-    if (wristY!=null && shoulderY!=null && wristY<shoulderY-20) {
-      return 'pull_up';
-    }
     if (sitAngle>=30 && sitAngle<=100) {
       return 'sit_up';
     }
@@ -68,49 +129,85 @@ class JointDisplayScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final type = exerciseType;
+    final future = waitForStreamArr();
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('관절 좌표 시각화')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text('운동 유형: $type',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+    return FutureBuilder<List<Joints?>?>(
+      future: future,
+      builder: (context, snapshot) {
+        if(!snapshot.hasData){
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final joints = snapshot.data!;
+        final type = _classifyExercise(joints[0]?.joints);
 
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => FeedbackScreen(
-                    exerciseType: type,
-                    joints: joints,
+        return Scaffold(
+          appBar: AppBar(title: const Text('관절 좌표 시각화')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text('운동 유형: $type',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => FeedbackScreen(
+                        exerciseType: type,
+                        jointsArr: joints,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.feedback),
+                label: const Text('피드백 보기'),
+              ),
+              const SizedBox(height: 24),
+
+              Image.memory(joints[0]!.frameBytes!, width: double.infinity, fit: BoxFit.fitWidth),
+              const SizedBox(height: 16),
+
+              const Text('추출된 관절 좌표',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Divider(),
+              // 중첩 리스트 각 그룹별로 위젯 생성
+              ...joints.asMap().entries.expand((entry) {
+                final groupIndex = entry.key;
+                final jointGroup = entry.value?.joints; // List<Map<String, dynamic>>
+
+                List<Widget> widgets = [];
+
+                // 그룹 제목
+                widgets.add(
+                  Text(
+                    '관절 그룹 ${groupIndex + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
-                ),
-              );
-            },
-            icon: const Icon(Icons.feedback),
-            label: const Text('피드백 보기'),
+                );
+                widgets.add(const Divider());
+
+                // 해당 그룹의 관절들 리스트
+                widgets.addAll(jointGroup!.map((j) {
+                  final x = (j['x'] as double).toStringAsFixed(1);
+                  final y = (j['y'] as double).toStringAsFixed(1);
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(j['type'] as String),
+                    subtitle: Text('x: $x, y: $y'),
+                  );
+                }));
+
+                widgets.add(const SizedBox(height: 20)); // 그룹 간 간격
+
+                return widgets;
+              }),
+            ],
           ),
-          const SizedBox(height: 24),
-
-          Image.file(File(thumbnailPath), width: double.infinity, fit: BoxFit.fitWidth),
-          const SizedBox(height: 16),
-
-          const Text('추출된 관절 좌표',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const Divider(),
-          ...joints.map((j) {
-            final x = (j['x'] as double).toStringAsFixed(1);
-            final y = (j['y'] as double).toStringAsFixed(1);
-            return ListTile(
-              title: Text(j['type'] as String),
-              subtitle: Text('x: $x, y: $y'),
-            );
-          }),
-        ],
-      ),
+        );
+    },
     );
   }
 }
