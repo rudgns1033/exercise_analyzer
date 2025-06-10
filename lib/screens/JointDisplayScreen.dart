@@ -109,7 +109,9 @@ class JointStreamDisplayScreen extends StatelessWidget {
     final shoulderY  = yOf('leftShoulder');
     final sitAngle   = angle('leftShoulder','leftHip','leftKnee');
 
-    if (wristY!=null && shoulderY!=null && wristY<shoulderY-20) {
+    if (wristY != null && shoulderY != null &&
+        wristY < shoulderY - 20 &&
+        squatKnee >= 150) {
       return 'pull_up';
     }
     if (pushElbow>=70 && pushElbow<=120 && torsoAngle>=160 && torsoAngle<=200) {
@@ -118,7 +120,7 @@ class JointStreamDisplayScreen extends StatelessWidget {
     if (pushElbow>=70 && pushElbow<=120 && torsoAngle>=70  && torsoAngle<=110) {
       return 'bench_press';
     }
-    if (squatKnee>0) {
+    if (squatKnee>=60 && squatKnee <= 110 && torsoAngle >= 150) {
       return 'squat';
     }
     if (sitAngle>=30 && sitAngle<=100) {
