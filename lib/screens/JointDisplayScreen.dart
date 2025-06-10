@@ -80,8 +80,10 @@ class JointStreamDisplayScreen extends StatelessWidget {
   }
 
   String _classifyExercise(List<Map<String, dynamic>>? joints) {
+    if (joints == null) return 'unknown';
+
     final lookup = <String, Map<String, double>>{
-      for (var j in joints!)
+      for (var j in joints)
         (j['type'] as String): {'x': j['x'] as double, 'y': j['y'] as double}
     };
 
@@ -109,25 +111,44 @@ class JointStreamDisplayScreen extends StatelessWidget {
     final shoulderY  = yOf('leftShoulder');
     final sitAngle   = angle('leftShoulder','leftHip','leftKnee');
 
+    // 1) Pull-up: 손목이 어깨 위에 충분히 올라왔고, 팔꿈치가 거의 펴진 상태 (elbow > 140°)
     if (wristY != null && shoulderY != null &&
-        wristY < shoulderY - 20 &&
-        squatKnee >= 150) {
+        wristY < shoulderY - 30 &&
+        pushElbow > 140) {
       return 'pull_up';
     }
-    if (pushElbow>=70 && pushElbow<=120 && torsoAngle>=160 && torsoAngle<=200) {
+
+    // 2) Push-up: 팔꿈치 약 70–120°, 몸통 거의 수평 (torso 160–200°)
+    if (pushElbow >= 70 && pushElbow <= 120 &&
+        torsoAngle >= 160 && torsoAngle <= 200) {
       return 'push_up';
     }
-    if (pushElbow>=70 && pushElbow<=120 && torsoAngle>=70  && torsoAngle<=110) {
+
+    // 3) Bench-press: 팔꿈치 약 70–120°, 몸통 수직 (torso 70–110°)
+    if (pushElbow >= 70 && pushElbow <= 120 &&
+        torsoAngle >= 70 && torsoAngle <= 110) {
       return 'bench_press';
     }
-    if (squatKnee>=60 && squatKnee <= 110 && torsoAngle >= 150) {
+
+    // 4) Squat: 무릎 각도 60–140°, 손목이 어깨 위에 있지 않아야 함
+    if (squatKnee >= 60 && squatKnee <= 140 &&
+        wristY != null && shoulderY != null && wristY > shoulderY - 20) {
       return 'squat';
     }
-    if (sitAngle>=30 && sitAngle<=100) {
+    // wristY/shoulderY가 없으면(둘 중 하나라도 null이면) squat 인정
+    if (squatKnee >= 60 && squatKnee <= 140 &&
+        (wristY == null || shoulderY == null)) {
+      return 'squat';
+    }
+
+    // 5) Sit-up: 허리(어깨‐엉덩이‐무릎 콤보) 30–100°
+    if (sitAngle >= 30 && sitAngle <= 100) {
       return 'sit_up';
     }
+
     return 'unknown';
   }
+
 
   @override
   Widget build(BuildContext context) {
